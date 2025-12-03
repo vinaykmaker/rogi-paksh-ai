@@ -1,3 +1,7 @@
+/**
+ * Production-optimized vision detection edge function
+ * Alternative endpoint with enhanced multilingual support
+ */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -5,13 +9,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// In-memory rate limiter
+// Configuration
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
-const RATE_LIMIT = 10;
+const RATE_LIMIT = 12;
 const RATE_WINDOW_MS = 60000;
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB base64
+const MAX_IMAGE_SIZE = 6 * 1024 * 1024;
 const MAX_RETRIES = 2;
-const RETRY_DELAY_MS = 1000;
+const RETRY_DELAY_MS = 1500;
+const REQUEST_TIMEOUT_MS = 45000;
 
 function checkRateLimit(clientIP: string): boolean {
   const now = Date.now();
@@ -22,112 +27,174 @@ function checkRateLimit(clientIP: string): boolean {
     return true;
   }
   
-  if (record.count >= RATE_LIMIT) {
-    return false;
-  }
-  
+  if (record.count >= RATE_LIMIT) return false;
   record.count++;
   return true;
 }
 
-// Helper to delay for retries
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Optimized system prompt for better accuracy
-const systemPrompt = `You are an expert agricultural plant pathologist AI specialized in Indian crops.
+// Comprehensive system prompt
+const systemPrompt = `You are AgriBot Vision AI, a specialized agricultural plant pathologist for Indian farmers.
 
-TASK: Analyze the plant/crop image and detect diseases, pests, nutrient deficiencies, or health issues.
+## MISSION
+Analyze crop images to detect diseases, pests, and nutritional deficiencies. Provide actionable guidance in multiple languages.
 
-CROP EXPERTISE (prioritize these common Indian crops):
-- Cereals: Rice, Wheat, Maize, Bajra, Jowar
-- Pulses: Chickpea (Chana), Pigeon Pea (Tur/Arhar), Lentil (Masoor), Black Gram (Urad), Green Gram (Moong)
-- Oilseeds: Groundnut, Mustard, Soybean, Sunflower, Sesame
-- Cash Crops: Cotton, Sugarcane, Tobacco, Jute
-- Vegetables: Tomato, Potato, Onion, Brinjal, Chilli, Okra, Cauliflower, Cabbage
-- Fruits: Mango, Banana, Papaya, Guava, Citrus, Pomegranate, Grapes
-- Spices: Turmeric, Ginger, Coriander, Cumin
+## CROP EXPERTISE
+CEREALS: Rice, Wheat, Maize, Bajra, Jowar, Ragi
+PULSES: Chickpea, Pigeon Pea, Lentils, Black Gram, Green Gram
+VEGETABLES: Tomato, Potato, Onion, Brinjal, Chilli, Okra, Cauliflower, Cabbage, Cucumber
+FRUITS: Mango, Banana, Papaya, Guava, Citrus, Pomegranate, Grapes
+OILSEEDS: Groundnut, Mustard, Soybean, Sunflower
+CASH CROPS: Cotton, Sugarcane, Tobacco, Jute
+SPICES: Turmeric, Ginger, Coriander
 
-DISEASE IDENTIFICATION CHECKLIST:
-1. Leaf symptoms: spots, lesions, wilting, yellowing, curling, holes
-2. Stem symptoms: cankers, rot, discoloration
-3. Fruit symptoms: spots, rot, deformities
-4. Root symptoms (if visible): rot, galls
-5. Overall plant health: stunting, wilting pattern
+## KEY DISEASES TO IDENTIFY
+- Rice: Blast, Brown Spot, Sheath Blight, Bacterial Leaf Blight
+- Wheat: Rust, Powdery Mildew, Loose Smut
+- Tomato: Early Blight, Late Blight, Leaf Curl Virus, Bacterial Wilt
+- Cotton: Bacterial Blight, Grey Mildew, Root Rot
+- Mango: Anthracnose, Powdery Mildew
+- Banana: Panama Wilt, Sigatoka, Bunchy Top
+- Chilli: Anthracnose, Leaf Curl, Bacterial Wilt
 
-RESPOND ONLY IN THIS JSON FORMAT:
+## RESPONSE FORMAT (JSON ONLY):
 {
   "detected": true,
-  "crop": "Identified crop name",
+  "crop": "Crop name",
   "disease": {
-    "name": "Disease/issue name in English",
-    "nameHi": "हिंदी नाम",
-    "nameKn": "ಕನ್ನಡ ಹೆಸರು"
+    "name": "Disease name in English",
+    "nameHi": "हिंदी में नाम",
+    "nameKn": "ಕನ್ನಡದಲ್ಲಿ ಹೆಸರು"
   },
   "severity": "mild|moderate|severe",
-  "confidence": 75,
+  "confidence": 50-99,
   "symptoms": {
-    "en": "Observed symptoms in 2-3 sentences",
-    "hi": "लक्षण हिंदी में",
-    "kn": "ಲಕ್ಷಣಗಳು ಕನ್ನಡದಲ್ಲಿ"
+    "en": "Detailed symptoms observed (2-3 sentences)",
+    "hi": "लक्षण का विवरण हिंदी में (2-3 वाक्य)",
+    "kn": "ಲಕ್ಷಣಗಳ ವಿವರಣೆ ಕನ್ನಡದಲ್ಲಿ (2-3 ವಾಕ್ಯಗಳು)"
   },
   "treatment": {
-    "en": "Step 1: [action]. Step 2: [action]. Chemical: [name and dosage]. Application: [method and timing]",
-    "hi": "उपचार हिंदी में",
-    "kn": "ಚಿಕಿತ್ಸೆ ಕನ್ನಡದಲ್ಲಿ"
+    "en": "Step-by-step treatment with specific chemicals/doses",
+    "hi": "चरणबद्ध उपचार विशिष्ट दवाओं/खुराक के साथ",
+    "kn": "ಹಂತ-ಹಂತವಾಗಿ ಚಿಕಿತ್ಸೆ ನಿರ್ದಿಷ್ಟ ಔಷಧಗಳು/ಡೋಸ್ ಜೊತೆಗೆ"
   },
   "prevention": {
     "en": "3-4 prevention tips",
-    "hi": "रोकथाम हिंदी में",
-    "kn": "ತಡೆಗಟ್ಟುವಿಕೆ ಕನ್ನಡದಲ್ಲಿ"
+    "hi": "3-4 रोकथाम के उपाय",
+    "kn": "3-4 ತಡೆಗಟ್ಟುವ ಸಲಹೆಗಳು"
   },
   "organic_remedy": {
-    "en": "Low-cost organic solution with exact measurements",
-    "hi": "जैविक उपाय हिंदी में",
-    "kn": "ಸಾವಯವ ಪರಿಹಾರ ಕನ್ನಡದಲ್ಲಿ"
+    "en": "Natural/organic treatment option with measurements",
+    "hi": "प्राकृतिक/जैविक उपचार माप के साथ",
+    "kn": "ನೈಸರ್ಗಿಕ/ಸಾವಯವ ಚಿಕಿತ್ಸೆ ಅಳತೆಯೊಂದಿಗೆ"
   }
 }
 
-RULES:
-1. If NOT a plant image: {"detected": false, "message": {"en": "Please upload a clear image of a plant or crop", "hi": "कृपया पौधे की स्पष्ट तस्वीर अपलोड करें", "kn": "ದಯವಿಟ್ಟು ಸಸ್ಯದ ಸ್ಪಷ್ಟ ಚಿತ್ರವನ್ನು ಅಪ್ಲೋಡ್ ಮಾಡಿ"}}
-2. If plant is HEALTHY: {"detected": true, "disease": {"name": "Healthy Plant", ...}, "severity": "none", "confidence": 85, ...}
-3. Set confidence 50-70 if unsure, recommend expert consultation
-4. Provide SPECIFIC dosages (e.g., "2ml per liter water")
-5. Include both chemical AND organic options
-6. Keep language simple for farmers`;
+## RULES:
+1. If NOT a plant image: {"detected": false, "message": {"en": "Please upload a plant image", "hi": "...", "kn": "..."}}
+2. If HEALTHY: Return with disease.name = "Healthy Plant", severity = "none"
+3. Confidence 50-70% if unsure, recommend expert
+4. Provide EXACT dosages (e.g., "2ml per liter")
+5. Include organic AND chemical options
+6. Keep language simple for farmers
+
+OUTPUT ONLY THE JSON. NO MARKDOWN.`;
 
 async function callVisionAI(imageBase64: string, apiKey: string): Promise<Response> {
-  const imageUrl = imageBase64.startsWith("data:") 
-    ? imageBase64 
-    : `data:image/jpeg;base64,${imageBase64}`;
+  const imageUrl = imageBase64.startsWith("data:") ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
 
-  return await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { 
+            role: "user", 
+            content: [
+              {
+                type: "text",
+                text: "Analyze this crop image. Identify the plant, detect any disease/pest/deficiency, and provide complete diagnosis with treatment in English, Hindi, and Kannada."
+              },
+              {
+                type: "image_url",
+                image_url: { url: imageUrl }
+              }
+            ]
+          }
+        ],
+        temperature: 0.2,
+        max_tokens: 3000,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
+function parseAIResponse(aiResponse: string): Record<string, unknown> {
+  let cleaned = aiResponse
+    .replace(/```json\n?/gi, '')
+    .replace(/```\n?/gi, '')
+    .trim();
+  
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (jsonMatch) cleaned = jsonMatch[0];
+  
+  const result = JSON.parse(cleaned);
+  
+  // Validate and normalize
+  if (typeof result.detected !== 'boolean') result.detected = true;
+  if (result.detected && !result.confidence) result.confidence = 70;
+  if (result.confidence) result.confidence = Math.min(99, Math.max(0, parseInt(result.confidence)));
+  
+  return result;
+}
+
+function createErrorResponse(errorType: string, lang: string = "en"): Record<string, unknown> {
+  const messages: Record<string, Record<string, string>> = {
+    parse_error: {
+      en: "Unable to analyze image. Please try with a clearer, well-lit photo of the affected plant.",
+      hi: "छवि का विश्लेषण करने में असमर्थ। कृपया प्रभावित पौधे की स्पष्ट, अच्छी रोशनी वाली तस्वीर के साथ प्रयास करें।",
+      kn: "ಚಿತ್ರವನ್ನು ವಿಶ್ಲೇಷಿಸಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ. ದಯವಿಟ್ಟು ಪ್ರಭಾವಿತ ಸಸ್ಯದ ಸ್ಪಷ್ಟ, ಉತ್ತಮ ಬೆಳಕಿನ ಚಿತ್ರದೊಂದಿಗೆ ಪ್ರಯತ್ನಿಸಿ."
     },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { 
-          role: "user", 
-          content: [
-            {
-              type: "text",
-              text: "Analyze this crop image. Identify the plant, detect any disease/pest/deficiency, and provide diagnosis with treatment in English, Hindi, and Kannada."
-            },
-            {
-              type: "image_url",
-              image_url: { url: imageUrl }
-            }
-          ]
-        }
-      ],
-      temperature: 0.2, // Lower for more consistent results
-      max_tokens: 2500,
-    }),
-  });
+    timeout: {
+      en: "Request timed out. Please try with a smaller image.",
+      hi: "अनुरोध का समय समाप्त हो गया। कृपया छोटी छवि के साथ प्रयास करें।",
+      kn: "ವಿನಂತಿ ಸಮಯ ಮೀರಿದೆ. ದಯವಿಟ್ಟು ಸಣ್ಣ ಚಿತ್ರದೊಂದಿಗೆ ಪ್ರಯತ್ನಿಸಿ."
+    },
+    generic: {
+      en: "Detection failed. Please try again.",
+      hi: "पहचान विफल। कृपया पुनः प्रयास करें।",
+      kn: "ಪತ್ತೆ ವಿಫಲವಾಯಿತು. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
+    }
+  };
+
+  const msg = messages[errorType] || messages.generic;
+
+  return {
+    detected: false,
+    error: msg[lang] || msg.en,
+    message: msg,
+    tips: {
+      en: ["Take photo in natural daylight", "Focus on the affected area", "Hold camera steady"],
+      hi: ["प्राकृतिक दिन के उजाले में फोटो लें", "प्रभावित क्षेत्र पर ध्यान दें", "कैमरा स्थिर रखें"],
+      kn: ["ನೈಸರ್ಗಿಕ ಹಗಲು ಬೆಳಕಿನಲ್ಲಿ ಫೋಟೋ ತೆಗೆಯಿರಿ", "ಪ್ರಭಾವಿತ ಪ್ರದೇಶದ ಮೇಲೆ ಕೇಂದ್ರೀಕರಿಸಿ", "ಕ್ಯಾಮೆರಾ ಸ್ಥಿರವಾಗಿ ಹಿಡಿಯಿರಿ"]
+    }
+  };
 }
 
 serve(async (req) => {
@@ -135,15 +202,13 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const requestId = crypto.randomUUID().slice(0, 8);
   const clientIP = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   
   if (!checkRateLimit(clientIP)) {
-    console.warn(`Rate limit exceeded for IP: ${clientIP}`);
+    console.warn(`[${requestId}] Rate limited: ${clientIP}`);
     return new Response(
-      JSON.stringify({ 
-        error: "Too many requests. Please wait a moment and try again.",
-        detected: false 
-      }),
+      JSON.stringify({ error: "Too many requests. Please wait and try again.", detected: false }),
       { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
@@ -153,156 +218,107 @@ serve(async (req) => {
     const imageBase64 = body?.imageBase64;
     const language = body?.language || "en";
     
-    // Input validation
+    // Validate input
     if (!imageBase64 || typeof imageBase64 !== "string") {
       return new Response(
-        JSON.stringify({ 
-          error: "Image is required and must be a string",
-          detected: false 
-        }),
+        JSON.stringify({ error: "Image is required", detected: false }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     
     if (imageBase64.length > MAX_IMAGE_SIZE) {
       return new Response(
-        JSON.stringify({ 
-          error: "Image is too large. Please use an image under 5MB.",
-          detected: false 
-        }),
+        JSON.stringify({ error: "Image too large (max 5MB)", detected: false }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // Validate base64 format
-    const base64Pattern = /^data:image\/(jpeg|jpg|png|webp|gif);base64,|^[A-Za-z0-9+/=]+$/;
     const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
     if (cleanBase64.length < 100) {
       return new Response(
-        JSON.stringify({ 
-          error: "Invalid image data. Please upload a valid image.",
-          detected: false 
-        }),
+        JSON.stringify({ error: "Invalid image data", detected: false }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
+    if (!LOVABLE_API_KEY) throw new Error("AI service not configured");
 
-    console.log(`Processing image for disease detection (size: ${Math.round(imageBase64.length / 1024)}KB)`);
+    console.log(`[${requestId}] Processing (${Math.round(imageBase64.length / 1024)}KB)`);
 
-    // Retry logic for API calls
+    // Call AI with retries
     let response: Response | null = null;
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         if (attempt > 0) {
-          console.log(`Retry attempt ${attempt}/${MAX_RETRIES}`);
+          console.log(`[${requestId}] Retry ${attempt}`);
           await delay(RETRY_DELAY_MS * attempt);
         }
 
         response = await callVisionAI(imageBase64, LOVABLE_API_KEY);
 
         if (response.ok) {
+          console.log(`[${requestId}] AI response OK`);
           break;
         }
 
-        // Handle specific error codes
         if (response.status === 429) {
           if (attempt === MAX_RETRIES) {
             return new Response(
-              JSON.stringify({ 
-                error: "Service is busy. Please try again in a few minutes.",
-                detected: false 
-              }),
+              JSON.stringify({ error: "AI service busy. Try again later.", detected: false }),
               { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
-          continue; // Retry on rate limit
+          continue;
         }
 
         if (response.status === 402) {
           return new Response(
-            JSON.stringify({ 
-              error: "AI service temporarily unavailable. Please try again later.",
-              detected: false 
-            }),
-            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({ error: "AI service unavailable", detected: false }),
+            { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        // For other errors, try to continue
-        const errorText = await response.text();
-        console.error(`AI gateway error (attempt ${attempt}):`, response.status, errorText);
-        lastError = new Error(`AI gateway error: ${response.status}`);
-
-      } catch (fetchError) {
-        console.error(`Fetch error (attempt ${attempt}):`, fetchError);
-        lastError = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
+        lastError = new Error(`AI error: ${response.status}`);
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (lastError.name === 'AbortError') {
+          lastError = new Error("timeout");
+        }
       }
     }
 
     if (!response || !response.ok) {
-      throw lastError || new Error("Failed to get AI response after retries");
+      const errorType = lastError?.message === "timeout" ? "timeout" : "generic";
+      return new Response(
+        JSON.stringify(createErrorResponse(errorType, language)),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const data = await response.json();
     const aiResponse = data.choices?.[0]?.message?.content;
 
     if (!aiResponse) {
-      throw new Error("Empty response from AI");
+      return new Response(
+        JSON.stringify(createErrorResponse("generic", language)),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    console.log("Vision AI response received successfully");
-
-    // Parse JSON response with better error handling
-    let result;
+    // Parse response
+    let result: Record<string, unknown>;
     try {
-      // Clean markdown code blocks if present
-      let cleanedResponse = aiResponse
-        .replace(/```json\n?/g, '')
-        .replace(/```\n?/g, '')
-        .trim();
-      
-      // Try to extract JSON if wrapped in other text
-      const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        cleanedResponse = jsonMatch[0];
-      }
-      
-      result = JSON.parse(cleanedResponse);
-      
-      // Validate required fields
-      if (typeof result.detected !== 'boolean') {
-        result.detected = true;
-      }
-      if (result.detected && !result.confidence) {
-        result.confidence = 70; // Default confidence
-      }
-
+      result = parseAIResponse(aiResponse);
+      const disease = result.disease as Record<string, string> | undefined;
+      console.log(`[${requestId}] Result: ${result.crop || 'Unknown'} - ${disease?.name || 'N/A'}`);
     } catch (parseError) {
-      console.error("Failed to parse AI response:", parseError);
-      console.error("Raw response:", aiResponse.substring(0, 500));
-      
-      // Return a helpful fallback response
-      result = {
-        detected: false,
-        error: "Could not analyze image properly",
-        message: {
-          en: "Unable to detect disease. Please try with a clearer, well-lit image of the affected plant part (leaf, stem, or fruit). Ensure the image is in focus.",
-          hi: "रोग का पता नहीं चला। कृपया प्रभावित पौधे के भाग (पत्ती, तना, या फल) की स्पष्ट, अच्छी रोशनी वाली तस्वीर के साथ पुनः प्रयास करें।",
-          kn: "ರೋಗ ಪತ್ತೆಯಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಪ್ರಭಾವಿತ ಸಸ್ಯದ ಭಾಗದ (ಎಲೆ, ಕಾಂಡ, ಅಥವಾ ಹಣ್ಣು) ಸ್ಪಷ್ಟ, ಉತ್ತಮ ಬೆಳಕಿನ ಚಿತ್ರದೊಂದಿಗೆ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
-        },
-        tips: {
-          en: ["Take photo in natural daylight", "Focus on the affected area", "Include both healthy and affected parts for comparison"],
-          hi: ["प्राकृतिक दिन के उजाले में फोटो लें", "प्रभावित क्षेत्र पर ध्यान केंद्रित करें", "तुलना के लिए स्वस्थ और प्रभावित दोनों भागों को शामिल करें"],
-          kn: ["ನೈಸರ್ಗಿಕ ಹಗಲು ಬೆಳಕಿನಲ್ಲಿ ಫೋಟೋ ತೆಗೆಯಿರಿ", "ಪ್ರಭಾವಿತ ಪ್ರದೇಶದ ಮೇಲೆ ಕೇಂದ್ರೀಕರಿಸಿ", "ಹೋಲಿಕೆಗಾಗಿ ಆರೋಗ್ಯಕರ ಮತ್ತು ಪ್ರಭಾವಿತ ಭಾಗಗಳನ್ನು ಸೇರಿಸಿ"]
-        }
-      };
+      console.error(`[${requestId}] Parse error:`, parseError);
+      console.error(`[${requestId}] Raw:`, aiResponse.substring(0, 300));
+      result = createErrorResponse("parse_error", language);
     }
 
     return new Response(
@@ -311,29 +327,9 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error("Error in vision-detect:", error);
-    
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    const isTimeout = errorMessage.includes("timeout") || errorMessage.includes("timed out");
-    
+    console.error(`[${requestId}] Error:`, error);
     return new Response(
-      JSON.stringify({ 
-        error: isTimeout 
-          ? "Request timed out. Please try with a smaller image."
-          : "Detection failed. Please try again.",
-        detected: false,
-        message: {
-          en: isTimeout 
-            ? "The image is taking too long to process. Please try with a smaller or compressed image."
-            : "An error occurred during detection. Please try again.",
-          hi: isTimeout
-            ? "छवि को संसाधित करने में बहुत समय लग रहा है। कृपया छोटी छवि के साथ प्रयास करें।"
-            : "पहचान के दौरान त्रुटि हुई। कृपया पुनः प्रयास करें।",
-          kn: isTimeout
-            ? "ಚಿತ್ರವನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ತುಂಬಾ ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ. ದಯವಿಟ್ಟು ಸಣ್ಣ ಚಿತ್ರದೊಂದಿಗೆ ಪ್ರಯತ್ನಿಸಿ."
-            : "ಪತ್ತೆ ಸಮಯದಲ್ಲಿ ದೋಷ ಸಂಭವಿಸಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
-        }
-      }),
+      JSON.stringify(createErrorResponse("generic")),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
