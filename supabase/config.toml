@@ -1,1 +1,13 @@
 project_id = "kfpwmbrvahouuqoxommj"
+
+[functions.detect-disease]
+verify_jwt = false
+
+[functions.agribot-chat]
+verify_jwt = false
+
+[functions.vision-detect]
+verify_jwt = false
+
+[functions.generate-lesson]
+verify_jwt = false
