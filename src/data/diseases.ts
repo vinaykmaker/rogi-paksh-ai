@@ -6,7 +6,7 @@ from PIL import Image
 # ------------------------------
 # 1. Configure Gemini
 # ------------------------------
-genai.configure(api_key="")
+genai.configure(api_key="AIzaSyCsCcO60QlyyoexxJ5maOW9RVEJdGl61H4")
 MODEL = "gemini-1.5-pro"
 
 # ------------------------------
