@@ -59,10 +59,6 @@ const Index = () => {
                 currentLanguage={currentLanguage} 
                 translations={currentTranslations} 
               />
-              <VoiceAssistant 
-                currentLanguage={currentLanguage} 
-                translations={currentTranslations} 
-              />
             </div>
           </div>
         </section>
