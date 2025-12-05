@@ -142,7 +142,7 @@ const LearningSection: React.FC<LearningSectionProps> = ({ currentLanguage }) =>
         )}
 
         {!lesson && !isLoading && showTopicSelector && (
-          <TopicSelector currentLanguage={currentLanguage} onSelectTopic={handleTopicSelect} />
+          <TopicSelector currentLanguage={currentLanguage} onSelectTopic={handleTopicSelect} isLoading={isLoading} />
         )}
 
         {lesson && !isLoading && (

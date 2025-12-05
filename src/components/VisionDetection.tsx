@@ -58,14 +58,16 @@ const VisionDetection: React.FC<VisionDetectionProps> = ({ currentLanguage, tran
     }
 
     try {
-      // Compress if needed
+      // Read file as data URL first, then compress if needed
+      const rawDataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.readAsDataURL(file);
+      });
+      
       const imageData = file.size > 1024 * 1024 
-        ? await compressImage(file)
-        : await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target?.result as string);
-            reader.readAsDataURL(file);
-          });
+        ? await compressImage(rawDataUrl)
+        : rawDataUrl;
 
       setSelectedImage(imageData);
       setResult(null);
