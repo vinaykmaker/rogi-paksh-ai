@@ -15,6 +15,9 @@ interface Lesson {
   keyPoints: Array<{ en: string; hi: string; kn: string }>;
   practicalTip: { en: string; hi: string; kn: string };
   didYouKnow: { en: string; hi: string; kn: string };
+  doNot?: { en: string; hi: string; kn: string };
+  audioSummary?: { en: string; hi: string; kn: string };
+  videoTopic?: string;
   quiz?: {
     question: { en: string; hi: string; kn: string };
     options: string[];
@@ -69,9 +72,9 @@ const MicroLesson: React.FC<MicroLessonProps> = ({
   };
 
   const labels = {
-    en: { keyPoints: 'Key Points:', tip: 'Practical Tip:', didYouKnow: 'Did You Know?', quiz: 'Quick Quiz:', correct: 'Correct!', incorrect: 'Incorrect. Correct answer highlighted.', next: 'Next Lesson' },
-    hi: { keyPoints: 'मुख्य बातें:', tip: 'व्यावहारिक सुझाव:', didYouKnow: 'क्या आप जानते हैं?', quiz: 'त्वरित क्विज:', correct: 'सही!', incorrect: 'गलत। सही जवाब हरे रंग में।', next: 'अगला पाठ' },
-    kn: { keyPoints: 'ಮುಖ್ಯ ಅಂಶಗಳು:', tip: 'ಪ್ರಾಯೋಗಿಕ ಸಲಹೆ:', didYouKnow: 'ನಿಮಗೆ ಗೊತ್ತೇ?', quiz: 'ತ್ವರಿತ ಕ್ವಿಜ್:', correct: 'ಸರಿ!', incorrect: 'ತಪ್ಪು. ಸರಿ ಉತ್ತರ ಹಸಿರು ಬಣ್ಣದಲ್ಲಿ.', next: 'ಮುಂದಿನ ಪಾಠ' }
+    en: { keyPoints: 'Key Points:', tip: 'Practical Tip:', didYouKnow: 'Did You Know?', doNot: 'Avoid This Mistake:', quiz: 'Quick Quiz:', correct: 'Correct!', incorrect: 'Incorrect. Correct answer highlighted.', next: 'Next Lesson', listenSummary: 'Listen to Summary' },
+    hi: { keyPoints: 'मुख्य बातें:', tip: 'व्यावहारिक सुझाव:', didYouKnow: 'क्या आप जानते हैं?', doNot: 'यह गलती न करें:', quiz: 'त्वरित क्विज:', correct: 'सही!', incorrect: 'गलत। सही जवाब हरे रंग में।', next: 'अगला पाठ', listenSummary: 'सारांश सुनें' },
+    kn: { keyPoints: 'ಮುಖ್ಯ ಅಂಶಗಳು:', tip: 'ಪ್ರಾಯೋಗಿಕ ಸಲಹೆ:', didYouKnow: 'ನಿಮಗೆ ಗೊತ್ತೇ?', doNot: 'ಈ ತಪ್ಪನ್ನು ತಪ್ಪಿಸಿ:', quiz: 'ತ್ವರಿತ ಕ್ವಿಜ್:', correct: 'ಸರಿ!', incorrect: 'ತಪ್ಪು. ಸರಿ ಉತ್ತರ ಹಸಿರು ಬಣ್ಣದಲ್ಲಿ.', next: 'ಮುಂದಿನ ಪಾಠ', listenSummary: 'ಸಾರಾಂಶ ಕೇಳಿ' }
   };
   const t = labels[currentLanguage as keyof typeof labels] || labels.en;
 
@@ -153,6 +156,16 @@ const MicroLesson: React.FC<MicroLessonProps> = ({
           </h4>
           <p className="text-blue-700 dark:text-blue-300">{getText(lesson.didYouKnow)}</p>
         </div>
+
+        {/* Common Mistake to Avoid */}
+        {lesson.doNot && (
+          <div className="bg-red-50 dark:bg-red-950/30 p-4 rounded-xl border border-red-200 dark:border-red-800">
+            <h4 className="font-semibold mb-2 text-red-700 dark:text-red-400">
+              ⚠️ {t.doNot}
+            </h4>
+            <p className="text-red-700 dark:text-red-300">{getText(lesson.doNot)}</p>
+          </div>
+        )}
 
         {/* Quiz */}
         {lesson.quiz && (

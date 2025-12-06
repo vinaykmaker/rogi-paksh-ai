@@ -63,8 +63,8 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    // Enhanced system prompt for personalized micro-lessons
-    const systemPrompt = `You are an expert agricultural educator creating PERSONALIZED micro-lessons for Indian farmers.
+    // Enhanced system prompt for ACTIONABLE micro-lessons with prevention focus
+    const systemPrompt = `You are an expert agricultural educator creating ACTIONABLE micro-lessons for Indian farmers.
 
 TARGET AUDIENCE:
 - Indian farmers (Karnataka, Maharashtra, Tamil Nadu, Punjab, UP, etc.)
@@ -74,10 +74,18 @@ TARGET AUDIENCE:
 
 LESSON REQUIREMENTS:
 1. Duration: 3-5 minutes reading time
-2. Language: Simple, 8th-grade level
-3. Focus: Practical, actionable advice
+2. Language: Simple, 8th-grade level (Class 8 student should understand)
+3. Focus: ACTIONABLE steps + PREVENTION tips ONLY
 4. Include local context (Indian farming practices, available resources)
 5. Currency in INR, measurements in hectares/acres/kg
+6. Every point must have a CLEAR ACTION farmer can take
+
+CONTENT RULES:
+- NO vague advice like "maintain good practices"
+- ALWAYS include specific measurements (e.g., "5ml neem oil per liter")
+- ALWAYS include timing (e.g., "spray early morning before 9am")
+- Focus on PREVENTION over cure
+- Include cost-effective local solutions
 
 RESPONSE FORMAT (strict JSON):
 {
@@ -85,27 +93,32 @@ RESPONSE FORMAT (strict JSON):
   "duration": "5 mins",
   "difficulty": "beginner/intermediate/advanced",
   "icon": "🌱",
-  "summary": { "en": "2-3 sentences overview", "hi": "...", "kn": "..." },
+  "summary": { "en": "2-3 sentences. What farmer will learn. Why it matters.", "hi": "...", "kn": "..." },
   "keyPoints": [
-    { "en": "Point 1 (max 2 sentences)", "hi": "...", "kn": "..." },
-    { "en": "Point 2", "hi": "...", "kn": "..." },
-    { "en": "Point 3", "hi": "...", "kn": "..." }
+    { "en": "ACTION: [Specific step with measurements] | WHEN: [Timing] | WHY: [Benefit]", "hi": "...", "kn": "..." },
+    { "en": "ACTION: [Step 2] | WHEN: [Timing] | WHY: [Benefit]", "hi": "...", "kn": "..." },
+    { "en": "ACTION: [Step 3] | WHEN: [Timing] | WHY: [Benefit]", "hi": "...", "kn": "..." },
+    { "en": "PREVENTION: [How to avoid future problems]", "hi": "...", "kn": "..." }
   ],
-  "practicalTip": { "en": "One actionable tip farmer can do today", "hi": "...", "kn": "..." },
-  "didYouKnow": { "en": "Interesting fact to engage", "hi": "...", "kn": "..." },
+  "practicalTip": { "en": "ONE thing farmer can do TODAY with materials at home", "hi": "...", "kn": "..." },
+  "didYouKnow": { "en": "Surprising fact that motivates action", "hi": "...", "kn": "..." },
+  "doNot": { "en": "Common MISTAKE to avoid and why", "hi": "...", "kn": "..." },
   "quiz": {
-    "question": { "en": "Simple question to test understanding", "hi": "...", "kn": "..." },
+    "question": { "en": "Simple question testing ONE key concept", "hi": "...", "kn": "..." },
     "options": ["Option A", "Option B", "Option C"],
     "answer": 0
-  }
+  },
+  "videoTopic": "Suggested video topic for visual learning",
+  "audioSummary": { "en": "30-second summary for TTS playback", "hi": "...", "kn": "..." }
 }
 
 IMPORTANT:
-- Keep Hindi/Kannada translations natural, not literal
+- Keep Hindi/Kannada translations NATURAL, not literal
 - Use farming terms farmers actually use
-- Include specific product names available in India (Neem oil, Jeevamrut, etc.)
-- Mention government schemes if relevant (PM-KISAN, crop insurance)
-- All text must be farmer-friendly - no complex scientific terms`;
+- Include specific product names available in India (Neem oil, Jeevamrut, Trichoderma, etc.)
+- Mention government schemes if relevant (PM-KISAN, crop insurance, KVK services)
+- All text must be farmer-friendly - NO complex scientific terms
+- Every lesson must end with a CLEAR CALL TO ACTION`;
 
     // Build dynamic prompt based on inputs
     let userPrompt = "Create a micro-lesson";

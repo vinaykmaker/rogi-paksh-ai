@@ -18,6 +18,9 @@ interface DetectionResult {
   category: string;
   severity: string;
   confidence: string;
+  verification_notes?: string;
+  alternative_diagnosis?: string;
+  confidence_reason?: string;
   description: {
     english: string;
     hindi: string;
@@ -28,12 +31,18 @@ interface DetectionResult {
     hindi: string;
     kannada: string;
   };
+  prevention?: {
+    english: string;
+    hindi: string;
+    kannada: string;
+  };
   tts: {
     english: string;
     hindi: string;
     kannada: string;
   };
-  preventive_tips: string;
+  action_urgency?: string;
+  expert_consultation?: boolean;
   timestamp: string;
 }
 
@@ -449,7 +458,10 @@ const DetectionSection: React.FC<DetectionSectionProps> = ({ translations, curre
                       <div className="space-y-1 text-sm">
                         <p><span className="font-semibold">🔍 What We Detected:</span> {detectionResult.description.english}</p>
                         <p><span className="font-semibold">💊 Treatment & Solutions:</span> {detectionResult.solutions.english}</p>
-                        <p><span className="font-semibold">🛡️ Prevention Tips:</span> General Prevention: Crop rotation, proper spacing, field hygiene, resistant varieties.</p>
+                        <p><span className="font-semibold">🛡️ Prevention:</span> {detectionResult.prevention?.english || 'Practice crop rotation, proper spacing, field hygiene, and use resistant varieties.'}</p>
+                        {detectionResult.expert_consultation && (
+                          <p className="text-amber-600 font-semibold">⚠️ Expert consultation recommended for this case.</p>
+                        )}
                       </div>
                     </div>
 
