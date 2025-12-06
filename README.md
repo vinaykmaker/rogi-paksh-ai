@@ -25,7 +25,6 @@ live link: https://rogi-paksh-ai.lovable.app
 
 - Voice-first: hands-free, noise tolerant, multilingual & code-mixed inputs.
 - Education + Diagnosis: text/audio/video lessons plus high-accuracy disease detection.
-- Offline-capable: caches essential lessons and Q&A for low-connectivity use.
 - Personalized: adapts lessons by crop, region, season, soil and history.
 - Farmer-friendly: simple language, step-by-step guidance, daily micro-tips.
 
