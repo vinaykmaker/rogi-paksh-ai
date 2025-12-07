@@ -1,12 +1,12 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { Camera, Upload, Scan, Volume2, AlertTriangle, CheckCircle, Loader2, X, ImageIcon, Info } from 'lucide-react';
+import { Camera, Upload, Scan, Volume2, AlertTriangle, CheckCircle, Loader2, X, ImageIcon, Info, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useSpeechSynthesis, getLocalizedText } from '@/hooks/useSpeechSynthesis';
-import { compressImage, analyzeImageQuality, validateImage } from '@/lib/imageUtils';
+import { compressImage, analyzeImageQuality, validateImage, preprocessForDetection } from '@/lib/imageUtils';
 
 interface DetectionResult {
   detected: boolean;
@@ -20,6 +20,9 @@ interface DetectionResult {
   organic_remedy?: { en: string; hi: string; kn: string };
   message?: { en: string; hi: string; kn: string };
   error?: string;
+  expert_consultation?: boolean;
+  alternative_diagnosis?: string;
+  confidence_reason?: string;
 }
 
 interface VisionDetectionProps {
@@ -29,6 +32,7 @@ interface VisionDetectionProps {
 }
 
 const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB
+const MIN_QUALITY_SCORE = 50; // Increased from 40 for better accuracy
 
 const VisionDetection: React.FC<VisionDetectionProps> = ({ currentLanguage, translations, onDetectionResult }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -65,36 +69,50 @@ const VisionDetection: React.FC<VisionDetectionProps> = ({ currentLanguage, tran
     }
 
     try {
-      // Read file as data URL first, then compress if needed
+      // Read file as data URL first
       const rawDataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = (e) => resolve(e.target?.result as string);
         reader.readAsDataURL(file);
       });
       
-      const imageData = file.size > 1024 * 1024 
+      // Compress if over 1MB
+      const compressedImage = file.size > 1024 * 1024 
         ? await compressImage(rawDataUrl)
         : rawDataUrl;
 
-      setSelectedImage(imageData);
-      handleSetResult(null);
-
-      // Analyze image quality
-      const quality = await analyzeImageQuality(imageData);
+      // Analyze image quality BEFORE setting
+      const quality = await analyzeImageQuality(compressedImage);
       setImageQuality(quality);
 
-      if (quality.score < 40) {
+      // Apply preprocessing for better AI detection
+      const { processedImage } = await preprocessForDetection(compressedImage);
+      
+      setSelectedImage(processedImage);
+      handleSetResult(null);
+
+      // Show quality warnings with appropriate severity
+      if (quality.score < MIN_QUALITY_SCORE) {
+        toast({
+          title: currentLanguage === 'hi' ? 'छवि गुणवत्ता बहुत कम है' : currentLanguage === 'kn' ? 'ಚಿತ್ರ ಗುಣಮಟ್ಟ ತುಂಬಾ ಕಡಿಮೆ' : 'Image Quality Too Low',
+          description: currentLanguage === 'hi' 
+            ? 'कृपया बेहतर रोशनी में स्पष्ट फोटो लें' 
+            : currentLanguage === 'kn' 
+            ? 'ದಯವಿಟ್ಟು ಉತ್ತಮ ಬೆಳಕಿನಲ್ಲಿ ಸ್ಪಷ್ಟ ಫೋಟೋ ತೆಗೆಯಿರಿ' 
+            : 'Please take a clearer photo with better lighting for accurate detection',
+          variant: "destructive"
+        });
+      } else if (quality.score < 60) {
         toast({
           title: currentLanguage === 'hi' ? 'छवि गुणवत्ता कम है' : currentLanguage === 'kn' ? 'ಚಿತ್ರ ಗುಣಮಟ್ಟ ಕಡಿಮೆ' : 'Low Image Quality',
-          description: quality.recommendations[0] || 'Try with better lighting',
-          variant: "destructive"
+          description: quality.recommendations[0] || 'Results may be less accurate',
         });
       }
     } catch (error) {
       console.error('Image processing error:', error);
       toast({
         title: "Error",
-        description: "Failed to process image",
+        description: "Failed to process image. Please try another photo.",
         variant: "destructive"
       });
     }
@@ -103,14 +121,28 @@ const VisionDetection: React.FC<VisionDetectionProps> = ({ currentLanguage, tran
   const analyzeImage = async () => {
     if (!selectedImage) return;
 
+    // Warn if quality is too low
+    if (imageQuality && imageQuality.score < MIN_QUALITY_SCORE) {
+      toast({
+        title: currentLanguage === 'hi' ? 'चेतावनी' : currentLanguage === 'kn' ? 'ಎಚ್ಚರಿಕೆ' : 'Warning',
+        description: currentLanguage === 'hi' 
+          ? 'कम गुणवत्ता वाली छवि से परिणाम सटीक नहीं हो सकते' 
+          : currentLanguage === 'kn' 
+          ? 'ಕಡಿಮೆ ಗುಣಮಟ್ಟದ ಚಿತ್ರದಿಂದ ಫಲಿತಾಂಶಗಳು ನಿಖರವಾಗಿರುವುದಿಲ್ಲ' 
+          : 'Low quality image may produce less accurate results',
+      });
+    }
+
     setIsAnalyzing(true);
     handleSetResult(null);
 
     try {
+      // Use vision-detect endpoint with preprocessed image
       const { data, error } = await supabase.functions.invoke('vision-detect', {
         body: { 
           imageBase64: selectedImage,
-          language: currentLanguage 
+          language: currentLanguage,
+          qualityScore: imageQuality?.score || 0
         }
       });
 
@@ -118,11 +150,25 @@ const VisionDetection: React.FC<VisionDetectionProps> = ({ currentLanguage, tran
       
       handleSetResult(data);
 
+      // Show appropriate feedback based on confidence
       if (data.detected) {
-        toast({
-          title: currentLanguage === 'hi' ? 'विश्लेषण पूर्ण' : currentLanguage === 'kn' ? 'ವಿಶ್ಲೇಷಣೆ ಪೂರ್ಣ' : 'Analysis Complete',
-          description: currentLanguage === 'hi' ? 'रोग का पता चला। नीचे परिणाम देखें।' : currentLanguage === 'kn' ? 'ರೋಗ ಪತ್ತೆಯಾಗಿದೆ. ಕೆಳಗೆ ಫಲಿತಾಂಶ ನೋಡಿ.' : 'Disease detected. See results below.',
-        });
+        const confidence = data.confidence || 0;
+        if (confidence < 60) {
+          toast({
+            title: currentLanguage === 'hi' ? 'कम विश्वास परिणाम' : currentLanguage === 'kn' ? 'ಕಡಿಮೆ ವಿಶ್ವಾಸ ಫಲಿತಾಂಶ' : 'Low Confidence Result',
+            description: currentLanguage === 'hi' 
+              ? 'विशेषज्ञ से परामर्श लें या बेहतर फोटो से प्रयास करें' 
+              : currentLanguage === 'kn' 
+              ? 'ತಜ್ಞರನ್ನು ಸಂಪರ್ಕಿಸಿ ಅಥವಾ ಉತ್ತಮ ಫೋಟೋದೊಂದಿಗೆ ಪ್ರಯತ್ನಿಸಿ' 
+              : 'Consider consulting an expert or try with a better photo',
+            variant: "destructive"
+          });
+        } else {
+          toast({
+            title: currentLanguage === 'hi' ? 'विश्लेषण पूर्ण' : currentLanguage === 'kn' ? 'ವಿಶ್ಲೇಷಣೆ ಪೂರ್ಣ' : 'Analysis Complete',
+            description: currentLanguage === 'hi' ? 'रोग का पता चला। नीचे परिणाम देखें।' : currentLanguage === 'kn' ? 'ರೋಗ ಪತ್ತೆಯಾಗಿದೆ. ಕೆಳಗೆ ಫಲಿತಾಂಶ ನೋಡಿ.' : 'Disease detected. See results below.',
+          });
+        }
       }
     } catch (error) {
       console.error('Vision detection error:', error);
@@ -239,13 +285,42 @@ const VisionDetection: React.FC<VisionDetectionProps> = ({ currentLanguage, tran
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {result.detected ? (
               <>
+                {/* Low Confidence Warning */}
+                {(result.confidence && result.confidence < 70) && (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                    <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-amber-700 dark:text-amber-300">
+                      <p className="font-medium">
+                        {currentLanguage === 'hi' ? 'कम विश्वास परिणाम' : currentLanguage === 'kn' ? 'ಕಡಿಮೆ ವಿಶ್ವಾಸ ಫಲಿತಾಂಶ' : 'Low Confidence Result'}
+                      </p>
+                      <p>
+                        {currentLanguage === 'hi' 
+                          ? 'बेहतर फोटो से पुनः प्रयास करें या कृषि विशेषज्ञ से संपर्क करें।' 
+                          : currentLanguage === 'kn' 
+                          ? 'ಉತ್ತಮ ಫೋಟೋದೊಂದಿಗೆ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ ಅಥವಾ ಕೃಷಿ ತಜ್ಞರನ್ನು ಸಂಪರ್ಕಿಸಿ.' 
+                          : 'Try again with a better photo or consult an agricultural expert.'}
+                      </p>
+                      {result.alternative_diagnosis && (
+                        <p className="mt-1">
+                          {currentLanguage === 'hi' ? 'अन्य संभावना: ' : currentLanguage === 'kn' ? 'ಇತರ ಸಾಧ್ಯತೆ: ' : 'Alternative: '}
+                          <strong>{result.alternative_diagnosis}</strong>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Disease Header */}
-                <div className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/30 p-4 rounded-xl border border-red-200 dark:border-red-800">
+                <div className={`bg-gradient-to-r p-4 rounded-xl border ${
+                  result.confidence && result.confidence >= 70 
+                    ? 'from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/30 border-red-200 dark:border-red-800'
+                    : 'from-amber-50 to-yellow-50 dark:from-amber-950/30 dark:to-yellow-950/30 border-amber-200 dark:border-amber-800'
+                }`}>
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-center gap-3">
-                      <AlertTriangle className="h-8 w-8 text-red-500 flex-shrink-0" />
+                      <AlertTriangle className={`h-8 w-8 flex-shrink-0 ${result.confidence && result.confidence >= 70 ? 'text-red-500' : 'text-amber-500'}`} />
                       <div>
-                        <h3 className="font-bold text-lg text-red-700 dark:text-red-400">
+                        <h3 className={`font-bold text-lg ${result.confidence && result.confidence >= 70 ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-400'}`}>
                           {currentLanguage === 'hi' ? result.disease?.nameHi :
                            currentLanguage === 'kn' ? result.disease?.nameKn :
                            result.disease?.name}
@@ -257,10 +332,31 @@ const VisionDetection: React.FC<VisionDetectionProps> = ({ currentLanguage, tran
                       <Badge className={`${getSeverityColor(result.severity || '')} text-white`}>
                         {result.severity?.toUpperCase()}
                       </Badge>
-                      <span className="text-sm font-medium">{result.confidence}% {t.confidence}</span>
+                      <span className={`text-sm font-medium ${result.confidence && result.confidence < 70 ? 'text-amber-600' : ''}`}>
+                        {result.confidence}% {t.confidence}
+                      </span>
                     </div>
                   </div>
                 </div>
+
+                {/* Expert Consultation Recommendation */}
+                {result.expert_consultation && (
+                  <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-blue-700 dark:text-blue-300">
+                      <p className="font-medium">
+                        {currentLanguage === 'hi' ? '📞 विशेषज्ञ से संपर्क करें' : currentLanguage === 'kn' ? '📞 ತಜ್ಞರನ್ನು ಸಂಪರ್ಕಿಸಿ' : '📞 Expert Consultation Recommended'}
+                      </p>
+                      <p>
+                        {currentLanguage === 'hi' 
+                          ? 'किसान कॉल सेंटर: 1800-180-1551 (निःशुल्क)' 
+                          : currentLanguage === 'kn' 
+                          ? 'ರೈತ ಕಾಲ್ ಸೆಂಟರ್: 1800-180-1551 (ಉಚಿತ)' 
+                          : 'Kisan Call Center: 1800-180-1551 (Toll-free)'}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Info Cards */}
                 {result.symptoms && (
