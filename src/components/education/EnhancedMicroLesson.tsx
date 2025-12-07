@@ -215,7 +215,8 @@ const EnhancedMicroLesson: React.FC<EnhancedMicroLessonProps> = ({
       quizLabel: 'Quick Quiz', correct: 'Correct!', incorrect: 'Incorrect', 
       next: 'Next Lesson', complete: 'Complete Lesson', listenAll: 'Listen to Full Lesson',
       askQuestion: 'Ask a Question', schemes: 'Government Schemes',
-      step: 'Step', materials: 'Materials needed', warning: 'Warning', timing: 'When'
+      step: 'Step', materials: 'Materials needed', warning: 'Warning', timing: 'When',
+      score: 'Your Score'
     },
     hi: { 
       learn: 'सीखें', practice: 'अभ्यास', quizTab: 'क्विज', resources: 'संसाधन',
@@ -224,7 +225,8 @@ const EnhancedMicroLesson: React.FC<EnhancedMicroLessonProps> = ({
       quizLabel: 'त्वरित क्विज', correct: 'सही!', incorrect: 'गलत',
       next: 'अगला पाठ', complete: 'पाठ पूरा करें', listenAll: 'पूरा पाठ सुनें',
       askQuestion: 'सवाल पूछें', schemes: 'सरकारी योजनाएं',
-      step: 'चरण', materials: 'आवश्यक सामग्री', warning: 'चेतावनी', timing: 'कब'
+      step: 'चरण', materials: 'आवश्यक सामग्री', warning: 'चेतावनी', timing: 'कब',
+      score: 'आपका स्कोर'
     },
     kn: { 
       learn: 'ಕಲಿಯಿರಿ', practice: 'ಅಭ್ಯಾಸ', quizTab: 'ಕ್ವಿಜ್', resources: 'ಸಂಪನ್ಮೂಲಗಳು',
@@ -233,7 +235,8 @@ const EnhancedMicroLesson: React.FC<EnhancedMicroLessonProps> = ({
       quizLabel: 'ತ್ವರಿತ ಕ್ವಿಜ್', correct: 'ಸರಿ!', incorrect: 'ತಪ್ಪು',
       next: 'ಮುಂದಿನ ಪಾಠ', complete: 'ಪಾಠ ಪೂರ್ಣಗೊಳಿಸಿ', listenAll: 'ಪೂರ್ಣ ಪಾಠ ಕೇಳಿ',
       askQuestion: 'ಪ್ರಶ್ನೆ ಕೇಳಿ', schemes: 'ಸರ್ಕಾರಿ ಯೋಜನೆಗಳು',
-      step: 'ಹಂತ', materials: 'ಅಗತ್ಯ ವಸ್ತುಗಳು', warning: 'ಎಚ್ಚರಿಕೆ', timing: 'ಯಾವಾಗ'
+      step: 'ಹಂತ', materials: 'ಅಗತ್ಯ ವಸ್ತುಗಳು', warning: 'ಎಚ್ಚರಿಕೆ', timing: 'ಯಾವಾಗ',
+      score: 'ನಿಮ್ಮ ಅಂಕ'
     },
     te: {
       learn: 'నేర్చుకోండి', practice: 'అభ్యాసం', quizTab: 'క్విజ్', resources: 'వనరులు',
@@ -242,7 +245,8 @@ const EnhancedMicroLesson: React.FC<EnhancedMicroLessonProps> = ({
       quizLabel: 'త్వరిత క్విజ్', correct: 'సరి!', incorrect: 'తప్పు',
       next: 'తదుపరి పాఠం', complete: 'పాఠం పూర్తి', listenAll: 'పూర్తి పాఠం వినండి',
       askQuestion: 'ప్రశ్న అడగండి', schemes: 'ప్రభుత్వ పథకాలు',
-      step: 'దశ', materials: 'అవసరమైన సామగ్రి', warning: 'హెచ్చరిక', timing: 'ఎప్పుడు'
+      step: 'దశ', materials: 'అవసరమైన సామగ్రి', warning: 'హెచ్చరిక', timing: 'ఎప్పుడు',
+      score: 'మీ స్కోరు'
     }
   };
   const t = labels[currentLanguage as keyof typeof labels] || labels.en;
