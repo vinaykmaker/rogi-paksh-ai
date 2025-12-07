@@ -145,7 +145,7 @@ async function callVisionAI(imageBase64: string, apiKey: string): Promise<Respon
   }
 }
 
-function parseAIResponse(aiResponse: string): Record<string, unknown> {
+function parseAIResponse(aiResponse: string, qualityScore: number = 100): Record<string, unknown> {
   let cleaned = aiResponse
     .replace(/```json\n?/gi, '')
     .replace(/```\n?/gi, '')
@@ -159,7 +159,25 @@ function parseAIResponse(aiResponse: string): Record<string, unknown> {
   // Validate and normalize
   if (typeof result.detected !== 'boolean') result.detected = true;
   if (result.detected && !result.confidence) result.confidence = 70;
-  if (result.confidence) result.confidence = Math.min(99, Math.max(0, parseInt(result.confidence)));
+  
+  // Parse and validate confidence
+  let confidence = parseInt(result.confidence);
+  if (isNaN(confidence) || confidence < 0) confidence = 50;
+  confidence = Math.min(99, Math.max(0, confidence));
+  
+  // Adjust confidence based on image quality (penalize low quality images)
+  if (qualityScore < 50) {
+    confidence = Math.min(confidence, 60); // Cap at 60% for very low quality
+  } else if (qualityScore < 70) {
+    confidence = Math.round(confidence * 0.9); // 10% penalty for low quality
+  }
+  
+  result.confidence = confidence;
+  
+  // Add expert consultation flag for low confidence
+  if (confidence < 70) {
+    result.expert_consultation = true;
+  }
   
   return result;
 }
@@ -217,6 +235,7 @@ serve(async (req) => {
     const body = await req.json();
     const imageBase64 = body?.imageBase64;
     const language = body?.language || "en";
+    const qualityScore = body?.qualityScore || 100; // Client-side quality score
     
     // Validate input
     if (!imageBase64 || typeof imageBase64 !== "string") {
@@ -245,7 +264,12 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("AI service not configured");
 
-    console.log(`[${requestId}] Processing (${Math.round(imageBase64.length / 1024)}KB)`);
+    console.log(`[${requestId}] Processing (${Math.round(imageBase64.length / 1024)}KB, quality: ${qualityScore})`);
+    
+    // Log quality warning
+    if (qualityScore < 50) {
+      console.warn(`[${requestId}] Low quality image (${qualityScore}) - results may be less accurate`);
+    }
 
     // Call AI with retries
     let response: Response | null = null;
@@ -309,12 +333,12 @@ serve(async (req) => {
       );
     }
 
-    // Parse response
+    // Parse response with quality score for confidence adjustment
     let result: Record<string, unknown>;
     try {
-      result = parseAIResponse(aiResponse);
+      result = parseAIResponse(aiResponse, qualityScore);
       const disease = result.disease as Record<string, string> | undefined;
-      console.log(`[${requestId}] Result: ${result.crop || 'Unknown'} - ${disease?.name || 'N/A'}`);
+      console.log(`[${requestId}] Result: ${result.crop || 'Unknown'} - ${disease?.name || 'N/A'} (confidence: ${result.confidence}%)`);
     } catch (parseError) {
       console.error(`[${requestId}] Parse error:`, parseError);
       console.error(`[${requestId}] Raw:`, aiResponse.substring(0, 300));
